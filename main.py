@@ -83,19 +83,83 @@ def draw_board(board):
                 pygame.draw.circle(screen, YELLOW, (int(c * SQUARESIZE + SQUARESIZE / 2), height - int(r * SQUARESIZE + SQUARESIZE / 2)), RADIUS)
     pygame.display.update()
 
-# Configuração inicial
-board = create_board()
-game_over = False
-turn = random.randint(PLAYER, AI)
-screen = pygame.display.set_mode(size)
-draw_board(board)
+# Função para obter as colunas válidas onde o jogador pode jogar
+def get_valid_locations(board):
+    valid_locations = []
+    for col in range(COLUMNS):
+        if is_valid_location(board, col):
+            valid_locations.append(col)
+    return valid_locations
 
-# Funções Minimax e Poda Alfa-Beta adaptadas para a jogabilidade
-def minimax(board, depth, maximizingPlayer):
+# Função para verificar se o jogo acabou
+def is_terminal_node(board):
+    return winning_move(board, PLAYER_PIECE) or winning_move(board, AI_PIECE) or len(get_valid_locations(board)) == 0
+
+def score_position(board, piece):
+    # Check for winning move (add logic for your game)
+    score = 0
+
+    # Add evaluation for horizontal, vertical, and diagonal lines
+    # Example: Add points for potential winning moves
+    for row in range(ROWS):
+        for col in range(COLUMNS):
+            if board[row][col] == piece:
+                score += 1
+
+    # Example: Add more scoring logic based on your game
+    return score
+
+# Atualizar a função Minimax para usar a nova função get_valid_locations
+def minimax(board, depth, alpha, beta, maximizingPlayer):
+    valid_locations = get_valid_locations(board)
+    is_terminal = is_terminal_node(board)
+    if depth == 0 or is_terminal:
+        if is_terminal:
+            if winning_move(board, AI_PIECE):
+                return (None, 100000000000000)
+            elif winning_move(board, PLAYER_PIECE):
+                return (None, -10000000000000)
+            else:  # Game is over, no more valid moves
+                return (None, 0)
+        else:  # Depth is zero
+            return (None, score_position(board, AI_PIECE))
+    if maximizingPlayer:
+        value = -math.inf
+        column = random.choice(valid_locations)
+        for col in valid_locations:
+            row = get_next_open_row(board, col)
+            b_copy = board.copy()
+            drop_piece(b_copy, row, col, AI_PIECE)
+            new_score = minimax(b_copy, depth-1, alpha, beta, False)[1]
+            if new_score > value:
+                value = new_score
+                column = col
+            alpha = max(alpha, value)
+            if alpha >= beta:
+                break
+        return column, value
+
+    else:  # Minimizing player
+        value = math.inf
+        column = random.choice(valid_locations)
+        for col in valid_locations:
+            row = get_next_open_row(board, col)
+            b_copy = board.copy()
+            drop_piece(b_copy, row, col, PLAYER_PIECE)
+            new_score = minimax(b_copy, depth-1, alpha, beta, True)[1]
+            if new_score < value:
+                value = new_score
+                column = col
+            beta = min(beta, value)
+            if alpha >= beta:
+                break
+        return column, value
+
+def minimax_alpha_beta(board, depth, alpha, beta, maximizingPlayer):
     valid_locations = [c for c in range(COLUMNS) if is_valid_location(board, c)]
     is_terminal = winning_move(board, PLAYER_PIECE) or winning_move(board, AI_PIECE) or len(valid_locations) == 0
     if depth == 0 or is_terminal:
-        return (None, random.randint(-10, 10))  # Função de avaliação simulada
+        return (None, random.randint(-10, 10))
 
     if maximizingPlayer:
         value = -math.inf
@@ -104,10 +168,13 @@ def minimax(board, depth, maximizingPlayer):
             row = get_next_open_row(board, col)
             b_copy = board.copy()
             drop_piece(b_copy, row, col, AI_PIECE)
-            new_score = minimax(b_copy, depth - 1, False)[1]
+            new_score = minimax_alpha_beta(b_copy, depth - 1, alpha, beta, False)[1]
             if new_score > value:
                 value = new_score
                 best_col = col
+            alpha = max(alpha, value)
+            if alpha >= beta:
+                break
         return best_col, value
     else:
         value = math.inf
@@ -116,10 +183,13 @@ def minimax(board, depth, maximizingPlayer):
             row = get_next_open_row(board, col)
             b_copy = board.copy()
             drop_piece(b_copy, row, col, PLAYER_PIECE)
-            new_score = minimax(b_copy, depth - 1, True)[1]
+            new_score = minimax_alpha_beta(b_copy, depth - 1, alpha, beta, True)[1]
             if new_score < value:
                 value = new_score
                 best_col = col
+            beta = min(beta, value)
+            if alpha >= beta:
+                break
         return best_col, value
 
 # Função para obter profundidade da busca (ply)
@@ -134,34 +204,60 @@ def get_depth():
         except ValueError:
             print("Entrada inválida! Por favor, insira um número.")
 
-# Loop principal do jogo
-ply = get_depth()  # Obter profundidade definida pelo jogador
+# Função para escolher o algoritmo
+def choose_algorithm():
+    while True:
+        choice = input("Escolha o algoritmo (1: Minimax, 2: Poda Alfa-Beta): ")
+        if choice == '1':
+            return 'minimax'
+        elif choice == '2':
+            return 'alpha-beta'
+        else:
+            print("Opção inválida! Por favor, escolha 1 ou 2.")
 
+# Função para medir o tempo de execução
+def measure_time(func, *args):
+    start_time = time.time()
+    result = func(*args)
+    end_time = time.time()
+    print("Tempo de execução:", end_time - start_time, "segundos")
+    return result
 
+# Função para exibir o vencedor
 def display_winner(winner_text):
     label = font.render(winner_text, 1, (255, 255, 255))  # Cor branca para o texto
     screen.blit(label, (width // 2 - label.get_width() // 2, height // 2 - label.get_height() // 2))
     pygame.display.update()
 
-# Loop principal do jogo
-ply = get_depth()  # Obter profundidade definida pelo jogador
+# Inicializa o Pygame e espera o jogador escolher as configurações
+screen = pygame.display.set_mode(size)
+board = create_board()
 
+ply = get_depth()  # Obter profundidade definida pelo jogador
+algorithm = choose_algorithm()  # Escolher o algoritmo
+
+# Loop principal do jogo
+game_over = False
+turn = random.randint(PLAYER, AI)
+
+draw_board(board)  # Inicializar a tela do jogo
 
 while not game_over:
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
+            pygame.quit()
             sys.exit()
 
         if event.type == pygame.MOUSEMOTION:
             pygame.draw.rect(screen, BLACK, (0, 0, width, SQUARESIZE))
             posx = event.pos[0]
-            if turn == PLAYER:
-                pygame.draw.circle(screen, RED, (posx, int(SQUARESIZE / 2)), RADIUS)
+            pygame.draw.circle(screen, RED, (posx, int(SQUARESIZE / 2)), RADIUS)
 
         pygame.display.update()
 
         if event.type == pygame.MOUSEBUTTONDOWN:
             pygame.draw.rect(screen, BLACK, (0, 0, width, SQUARESIZE))
+            # Jogada do jogador
             if turn == PLAYER:
                 posx = event.pos[0]
                 col = int(math.floor(posx / SQUARESIZE))
@@ -169,28 +265,28 @@ while not game_over:
                 if is_valid_location(board, col):
                     row = get_next_open_row(board, col)
                     drop_piece(board, row, col, PLAYER_PIECE)
+
                     if winning_move(board, PLAYER_PIECE):
-                        print("PLAYER 1 WINS!")
+                        display_winner("Jogador Venceu!!")
                         game_over = True
 
                     turn = AI
-                    print_board(board)
-                    draw_board(board)
 
-    if turn == AI and not game_over:
-        col, minimax_score = minimax(board, ply, True)  # Usando o valor de profundidade definido pelo jogador
+            # Jogada da IA
+            if turn == AI and not game_over:
+                if algorithm == 'minimax':
+                    col, minimax_score = minimax(board, ply, -math.inf, math.inf, True)
+                else:
+                    col, minimax_score = minimax_alpha_beta(board, ply, -math.inf, math.inf, True)
 
-        if is_valid_location(board, col):
-            pygame.time.wait(500)
-            row = get_next_open_row(board, col)
-            drop_piece(board, row, col, AI_PIECE)
-            if winning_move(board, AI_PIECE):
-                print("PLAYER 2 WINS!")
-                game_over = True
+                if is_valid_location(board, col):
+                    row = get_next_open_row(board, col)
+                    drop_piece(board, row, col, AI_PIECE)
 
-            print_board(board)
+                    if winning_move(board, AI_PIECE):
+                        display_winner("IA Venceu!!")
+                        game_over = True
+
+                    turn = PLAYER
+
             draw_board(board)
-            turn = PLAYER
-
-    if game_over:
-        pygame.time.wait(3000)
